@@ -8,6 +8,7 @@
 #include "./array.h"
 
 #define TZL_JSON_TEST
+#define TZL_JSON_IMPLEMENTATION
 #include "./json.h"
 
 #define TEST(x)                          \

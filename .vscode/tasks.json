@@ -2,6 +2,24 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "build test.c",
+            "type": "shell",
+            "command": "gcc",
+            "args": [
+                "-g",
+                "-o",
+                "${workspaceFolder}/test",
+                "${workspaceFolder}/test.c"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
             "label": "build current file",
             "type": "shell",
             "command": "gcc",
@@ -13,7 +31,7 @@
             ],
             "group": {
                 "kind": "build",
-                "isDefault": true
+                "isDefault": false
             },
             "problemMatcher": [
                 "$gcc"
