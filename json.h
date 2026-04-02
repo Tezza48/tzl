@@ -2,33 +2,7 @@
 #include <string.h>
 #include "array.h"
 #include <ctype.h>
-
-typedef struct
-{
-    char *data;
-    size_t len;
-} str;
-
-#define STR_FMT "%.*s"
-#define STR_ARGS(s) (s).len, (s).data
-
-str to_str(char *cstr)
-{
-    return (str){cstr, strlen(cstr)};
-}
-
-str str_split(str *s, size_t len)
-{
-    assert(len <= s->len);
-    str r;
-    r.data = s->data;
-    r.len = len;
-
-    s->data += len;
-    s->len -= len;
-
-    return r;
-}
+#include "str.h"
 
 typedef enum
 {
@@ -71,7 +45,7 @@ char *tk_to_cstr(tk t)
 typedef struct
 {
     tk kind;
-    str t;
+    tzl_str t;
 } token;
 
 typedef struct
@@ -81,44 +55,44 @@ typedef struct
     size_t cap;
 } tzl_j_ts;
 
-token token_next(str *json)
+token token_next(tzl_str *json)
 {
     if (json->len == 0)
         return (token){.kind = tk_invalid, .t = *json};
 
     while ((isspace(*json->data) || ',' == *json->data || ':' == *json->data) && 0 < json->len)
     {
-        str_split(json, 1);
+        tzl_str_split(json, 1);
     }
 
     if (*json->data == '[')
     {
-        token t = {.kind = tk_array_start, .t = str_split(json, 1)};
+        token t = {.kind = tk_array_start, .t = tzl_str_split(json, 1)};
         return t;
     }
 
     if (*json->data == ']')
     {
-        token t = {.kind = tk_array_end, .t = str_split(json, 1)};
+        token t = {.kind = tk_array_end, .t = tzl_str_split(json, 1)};
         return t;
     }
 
     if (*json->data == '{')
     {
-        token t = {.kind = tk_obj_start, .t = str_split(json, 1)};
+        token t = {.kind = tk_obj_start, .t = tzl_str_split(json, 1)};
         return t;
     }
 
     if (*json->data == '}')
     {
-        token t = {.kind = tk_obj_end, .t = str_split(json, 1)};
+        token t = {.kind = tk_obj_end, .t = tzl_str_split(json, 1)};
         return t;
     }
 
     if (*json->data == '"')
     {
         // Snip off the starting '"'
-        str_split(json, 1);
+        tzl_str_split(json, 1);
 
         // Loop to the end of the string
         size_t len = 0;
@@ -138,9 +112,9 @@ token token_next(str *json)
             len++;
         }
 
-        token t = {.kind = tk_string, .t = str_split(json, len)};
+        token t = {.kind = tk_string, .t = tzl_str_split(json, len)};
         // Snip off the final '"'
-        str_split(json, 1);
+        tzl_str_split(json, 1);
 
         return t;
     }
@@ -164,7 +138,7 @@ token token_next(str *json)
             len++;
         }
 
-        token t = {.kind = tk_number, .t = str_split(json, len)};
+        token t = {.kind = tk_number, .t = tzl_str_split(json, len)};
         return t;
     }
 
@@ -182,11 +156,11 @@ token token_next(str *json)
             len++;
         }
 
-        token t = {.kind = tk_literal, .t = str_split(json, len)};
+        token t = {.kind = tk_literal, .t = tzl_str_split(json, len)};
         return t;
     }
 
-    return (token){.kind = tk_invalid, .t = str_split(json, 1)};
+    return (token){.kind = tk_invalid, .t = tzl_str_split(json, 1)};
 
     // TODO WT: ultimately shouldnt reach here when we're done.
 }
@@ -194,7 +168,7 @@ token token_next(str *json)
 #ifdef TZL_JSON_TEST
 char *tzl_json_test(void)
 {
-    str json_str = to_str("{\"key\": 25, \"other key\": \"Some string value\", \"an array\": [0, 1, 2, 3, 420.69, null, \"hello\"]}");
+    tzl_str json_str = tzl_str_from_cstr("{\"key\": 25, \"other key\": \"Some string value\", \"an array\": [0, 1, 2, 3, 420.69, null, \"hello\"]}");
     tzl_j_ts tokens = {0};
 
     token t;
@@ -206,7 +180,7 @@ char *tzl_json_test(void)
     for (size_t i = 0; i < tokens.len; i++)
     {
         token t = tokens.data[i];
-        printf("    Token: %-15s -> " STR_FMT "\n", tk_to_cstr(t.kind), STR_ARGS(t.t));
+        printf("    Token: %-15s -> " TZL_STR_FMT "\n", tk_to_cstr(t.kind), TZL_STR_ARGS(t.t));
     }
 
     return 0;
