@@ -29,8 +29,14 @@ typedef enum
     tzlj_vk_null,
 } tzlj_vk;
 
-typedef struct tzlj_value tzlj_value;
+typedef struct
+{
+    void *chunk;
+    size_t cap;
+    size_t head;
+} tzlj_arena;
 
+typedef struct tzlj_value tzlj_value;
 struct tzlj_value
 {
     tzlj_vk kind;
@@ -75,7 +81,41 @@ typedef struct
     size_t cap;
 } tzl_j_ts;
 
+void *tzlj_arena_alloc(tzlj_arena *arena, size_t bytes);
+tzlj_arena tzlj_arena_create(size_t bytes);
+void tzlj_arena_free(tzlj_arena *arena);
+
+tzlj_token tzlj_token_next(tzl_str *json);
+tzlj_value *tzlj_parse(tzl_str src, tzlj_arena *arena);
+
 #ifdef TZL_JSON_IMPLEMENTATION
+void *tzlj_arena_alloc(tzlj_arena *arena, size_t bytes)
+{
+    assert(arena->head + bytes <= arena->cap);
+
+    void *result = (char *)arena->chunk + arena->head;
+    arena->head += bytes;
+    return result;
+}
+
+tzlj_arena tzlj_arena_create(size_t bytes)
+{
+    tzlj_arena result = {
+        .chunk = calloc(bytes, sizeof(char)),
+        .head = 0,
+        .cap = bytes,
+    };
+    return result;
+}
+
+void tzlj_arena_free(tzlj_arena *arena)
+{
+    free(arena->chunk);
+    arena->chunk = 0;
+    arena->cap = 0;
+    arena->head = 0;
+}
+
 tzlj_token tzlj_token_next(tzl_str *json)
 {
     if (json->len == 0)
@@ -184,13 +224,7 @@ tzlj_token tzlj_token_next(tzl_str *json)
     return (tzlj_token){.kind = tzlj_tk_invalid, .data = tzl_str_split(json, 1)};
 }
 
-/// @brief
-///     Parse a string as json, the json value tree is valid for the lifetime of the string
-///
-///     By using string views we don't need to allocate and deal with strings everywhere.
-/// @param src
-/// @return
-tzlj_value *tzlj_parse(tzl_str src)
+tzlj_value *tzlj_parse(tzl_str src, tzlj_arena *arena)
 {
     struct
     {
@@ -199,7 +233,12 @@ tzlj_value *tzlj_parse(tzl_str src)
         size_t cap;
     } stack = {0};
 
-    tzl_str lexer = src;
+    // Copy the string into the arena, so the lifetime of strings is in the arena not the passed in slice
+    tzl_str lexer = {
+        .data = tzlj_arena_alloc(arena, src.len),
+        .len = src.len,
+    };
+    memcpy(lexer.data, src.data, src.len);
 
     // Root array just to conveniently store any top level values that might have been submitted
     tzlj_value root = {
@@ -233,7 +272,7 @@ tzlj_value *tzlj_parse(tzl_str src)
             t = tzlj_token_next(&lexer);
         }
 
-        tzlj_value *v = calloc(1, sizeof(*v));
+        tzlj_value *v = tzlj_arena_alloc(arena, sizeof(*v));
 
         if (t.kind == tzlj_tk_array_start)
         {
@@ -307,12 +346,6 @@ tzlj_value *tzlj_parse(tzl_str src)
 
     return root.array.data[0];
 }
-
-void tzlj_value_free(tzlj_value *value)
-{
-    // TODO WT: Recurse children and free
-}
-
 #endif
 
 #ifdef TZL_JSON_TEST
@@ -345,9 +378,26 @@ char *tzlj_tk_to_cstr(tzlj_tk t)
 
 char *tzl_json_test(void)
 {
+    tzlj_arena a = tzlj_arena_create(1024 * 1024);
+
     tzl_str json_str = tzl_str_from_cstr("{\"keyname\": \"a string value\", \"anarray\": [0, 1, 2, 3, 4]}");
     // tzl_str json_str = tzl_str_from_cstr("\"Hello, World!\"");
-    tzlj_value *val = tzlj_parse(json_str);
+    tzlj_value *val = tzlj_parse(json_str, &a);
+
+    tzlj_arena_free(&a);
+
+    a = tzlj_arena_create(1024);
+
+    char *other = "\"this is a json string\"";
+    tzl_str copy;
+    copy.data = strdup(other);
+    copy.len = strlen(other);
+
+    val = tzlj_parse(copy, &a);
+
+    free(copy.data);
+
+    tzlj_arena_free(&a);
 
     // TODO WT: create a result object, store all values in an arena that is returned in the ret object
     // then implement a free function that will free the arena
