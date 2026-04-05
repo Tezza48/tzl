@@ -88,8 +88,9 @@ void *tzlj_arena_alloc(tzlj_arena *arena, size_t bytes);
 tzlj_arena tzlj_arena_create(size_t bytes);
 void tzlj_arena_free(tzlj_arena *arena);
 
-tzlj_token tzlj_token_next(tzl_str *json);
 tzlj_value *tzlj_parse(tzl_str src, tzlj_arena *arena);
+tzlj_value *tzlj_object_get(tzlj_value *object, tzl_str key);
+#define tzlj_object_get_cstr(object, cstr) tzlj_object_get((object), tzl_str_from_cstr((cstr)))
 
 #ifdef TZL_JSON_IMPLEMENTATION
 void *tzlj_arena_alloc(tzlj_arena *arena, size_t bytes)
@@ -119,7 +120,7 @@ void tzlj_arena_free(tzlj_arena *arena)
     arena->head = 0;
 }
 
-tzlj_token tzlj_token_next(tzl_str *json)
+tzlj_token _tzlj_token_next(tzl_str *json)
 {
     if (json->len == 0)
         return (tzlj_token){.kind = tzlj_tk_invalid, .data = *json};
@@ -256,7 +257,7 @@ tzlj_value *tzlj_parse(tzl_str src, tzlj_arena *arena)
     tzlj_value *top = &root;
 
     tzlj_token t;
-    while ((t = tzlj_token_next(&lexer), t.kind != tzlj_tk_invalid))
+    while ((t = _tzlj_token_next(&lexer), t.kind != tzlj_tk_invalid))
     {
         // Array and object mutate the top so we have to store it
         tzlj_value *parent = top;
@@ -273,7 +274,7 @@ tzlj_value *tzlj_parse(tzl_str src, tzlj_arena *arena)
         {
             assert(t.kind == tzlj_tk_string);
             key = _tzlj_arena_strdup(arena, t.data);
-            t = tzlj_token_next(&lexer);
+            t = _tzlj_token_next(&lexer);
         }
 
         tzlj_value *v = tzlj_arena_alloc(arena, sizeof(*v));
@@ -362,6 +363,25 @@ tzlj_value *tzlj_parse(tzl_str src, tzlj_arena *arena)
 
     return root.array.data[0];
 }
+
+tzlj_value *tzlj_object_get(tzlj_value *object, tzl_str key)
+{
+    assert(object->kind == tzlj_vk_object);
+
+    for (size_t i = 0; i < object->object.len; i++)
+    {
+        tzlj_object_kv *kv = &object->object.data[i];
+        if (key.len != kv->key.len)
+            continue;
+
+        if (memcmp(key.data, kv->key.data, key.len) == 0)
+        {
+            return kv->val;
+        }
+    }
+
+    return NULL;
+}
 #endif
 
 #ifdef TZL_JSON_TEST
@@ -402,6 +422,15 @@ char *tzl_json_test(void)
         return "json parse: fourth key mismatch";
     if (root->object.data[3].val->kind != tzlj_vk_null)
         return "json parse: null value mismatch";
+
+    if (tzlj_object_get_cstr(root, "name")->kind != tzlj_vk_string)
+        return "json get: incorrect value returned for \"name\"";
+
+    if (tzlj_object_get_cstr(root, "values")->kind != tzlj_vk_array)
+        return "json get: incorrect value returned for \"values\"";
+
+    if (tzlj_object_get_cstr(root, "flag")->kind != tzlj_vk_bool)
+        return "json get: incorrect value returned for \"flag\"";
 
     tzlj_arena_free(&arena);
     return NULL;
