@@ -84,12 +84,36 @@ typedef struct
     size_t cap;
 } tzl_j_ts;
 
+/// @brief Allocate n bytes in the arena
+/// @param arena
+/// @param bytes
+/// @return
 void *tzlj_arena_alloc(tzlj_arena *arena, size_t bytes);
+
+/// @brief Creates an arena with n bytes of capacity
+/// @param bytes
+/// @return
 tzlj_arena tzlj_arena_create(size_t bytes);
+
+/// @brief Frees the entire arena
+/// @param arena
 void tzlj_arena_free(tzlj_arena *arena);
 
+/// @brief Parses an input string as JSON into a tzlj_value.
+///
+/// The returned value belongs to the arena passed in and is only valid for the lifetime of the arena.
+/// @param src
+/// @param arena
+/// @return
 tzlj_value *tzlj_parse(tzl_str src, tzlj_arena *arena);
+
+/// @brief Helper method for searching a tzlj_value of type tzlj_vk_object for an entry with the given key.
+/// @param object
+/// @param key
+/// @return Either the found value or NULL if not found
 tzlj_value *tzlj_object_get(tzlj_value *object, tzl_str key);
+
+/// Helper macro to use tzlj_object_get with a c string
 #define tzlj_object_get_cstr(object, cstr) tzlj_object_get((object), tzl_str_from_cstr((cstr)))
 
 #ifdef TZL_JSON_IMPLEMENTATION
