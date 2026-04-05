@@ -131,26 +131,22 @@ tzlj_token tzlj_token_next(tzl_str *json)
 
     if (*json->data == '[')
     {
-        tzlj_token t = {.kind = tzlj_tk_array_start, .data = tzl_str_split(json, 1)};
-        return t;
+        return (tzlj_token){.kind = tzlj_tk_array_start, .data = tzl_str_split(json, 1)};
     }
 
     if (*json->data == ']')
     {
-        tzlj_token t = {.kind = tzlj_tk_array_end, .data = tzl_str_split(json, 1)};
-        return t;
+        return (tzlj_token){.kind = tzlj_tk_array_end, .data = tzl_str_split(json, 1)};
     }
 
     if (*json->data == '{')
     {
-        tzlj_token t = {.kind = tzlj_tk_obj_start, .data = tzl_str_split(json, 1)};
-        return t;
+        return (tzlj_token){.kind = tzlj_tk_obj_start, .data = tzl_str_split(json, 1)};
     }
 
     if (*json->data == '}')
     {
-        tzlj_token t = {.kind = tzlj_tk_obj_end, .data = tzl_str_split(json, 1)};
-        return t;
+        return (tzlj_token){.kind = tzlj_tk_obj_end, .data = tzl_str_split(json, 1)};
     }
 
     if (*json->data == '"')
@@ -277,27 +273,30 @@ tzlj_value *tzlj_parse(tzl_str src, tzlj_arena *arena)
 
         tzlj_value *v = tzlj_arena_alloc(arena, sizeof(*v));
 
-        if (t.kind == tzlj_tk_array_start)
+        switch (t.kind)
+        {
+        case tzlj_tk_array_start:
         {
             tzl_arr_push(&stack, top);
             v->kind = tzlj_vk_array;
             top = v;
+            break;
         }
-
-        if (t.kind == tzlj_tk_obj_start)
+        case tzlj_tk_obj_start:
         {
+
             tzl_arr_push(&stack, top);
             v->kind = tzlj_vk_object;
             top = v;
+            break;
         }
-
-        if (t.kind == tzlj_tk_string)
+        case tzlj_tk_string:
         {
             v->kind = tzlj_vk_string;
             v->string = t.data;
+            break;
         }
-
-        if (t.kind == tzlj_tk_number)
+        case tzlj_tk_number:
         {
             v->kind = tzlj_vk_number;
             v->number.raw = t.data;
@@ -305,32 +304,40 @@ tzlj_value *tzlj_parse(tzl_str src, tzlj_arena *arena)
             memset(buf, 0, 128);
             memcpy(buf, t.data.data, t.data.len);
             v->number.number = atof(buf);
+            break;
         }
-
-        if (t.kind == tzlj_tk_literal)
+        case tzlj_tk_literal:
         {
-            char *lit_null = "null";
-            char *lit_true = "true";
-            char *lit_false = "false";
+            const struct
+            {
+                const char *str;
+                tzlj_vk kind;
+                bool bool_value;
+            } literals[] = {
+                {.str = "null", .kind = tzlj_vk_null, .bool_value = false},
+                {.str = "true", .kind = tzlj_vk_bool, .bool_value = true},
+                {.str = "false", .kind = tzlj_vk_bool, .bool_value = false},
+            };
+            const size_t num_literals = sizeof(literals) / sizeof(*literals);
 
-            if (memcmp(lit_null, t.data.data, t.data.len) == 0)
+            bool is_valid = false;
+            for (size_t lit = 0; lit < num_literals; lit++)
             {
-                v->kind = tzlj_vk_null;
+                if (memcmp(literals[lit].str, t.data.data, t.data.len) == 0)
+                {
+                    v->kind = literals[lit].kind;
+                    v->boolean = literals[lit].bool_value;
+                    is_valid = true;
+                    ;
+                }
             }
-            else if (memcmp(lit_true, t.data.data, t.data.len) == 0)
-            {
-                v->kind = tzlj_vk_bool;
-                v->boolean = true;
-            }
-            else if (memcmp(lit_false, t.data.data, t.data.len) == 0)
-            {
-                v->kind = tzlj_vk_bool;
-                v->boolean = false;
-            }
-            else
+
+            if (!is_valid)
             {
                 v->kind = tzlj_vk_invalid;
             }
+            break;
+        }
         }
 
         if (parent->kind == tzlj_vk_array)
