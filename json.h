@@ -223,6 +223,16 @@ tzlj_token tzlj_token_next(tzl_str *json)
     return (tzlj_token){.kind = tzlj_tk_invalid, .data = tzl_str_split(json, 1)};
 }
 
+static tzl_str _tzlj_arena_strdup(tzlj_arena *arena, tzl_str str)
+{
+    tzl_str result = {
+        .data = tzlj_arena_alloc(arena, str.len),
+        .len = str.len,
+    };
+    strncpy(result.data, str.data, str.len);
+    return result;
+}
+
 tzlj_value *tzlj_parse(tzl_str src, tzlj_arena *arena)
 {
     struct
@@ -232,12 +242,7 @@ tzlj_value *tzlj_parse(tzl_str src, tzlj_arena *arena)
         size_t cap;
     } stack = {0};
 
-    // Copy the string into the arena, so the lifetime of strings is in the arena not the passed in slice
-    tzl_str lexer = {
-        .data = tzlj_arena_alloc(arena, src.len),
-        .len = src.len,
-    };
-    memcpy(lexer.data, src.data, src.len);
+    tzl_str lexer = src;
 
     // Root array just to conveniently store any top level values that might have been submitted
     tzlj_value root = {
@@ -267,7 +272,7 @@ tzlj_value *tzlj_parse(tzl_str src, tzlj_arena *arena)
         if (top->kind == tzlj_vk_object)
         {
             assert(t.kind == tzlj_tk_string);
-            key = t.data;
+            key = _tzlj_arena_strdup(arena, t.data);
             t = tzlj_token_next(&lexer);
         }
 
@@ -293,16 +298,17 @@ tzlj_value *tzlj_parse(tzl_str src, tzlj_arena *arena)
         case tzlj_tk_string:
         {
             v->kind = tzlj_vk_string;
-            v->string = t.data;
+            v->string = _tzlj_arena_strdup(arena, t.data);
             break;
         }
         case tzlj_tk_number:
         {
             v->kind = tzlj_vk_number;
-            v->number.raw = t.data;
+            v->number.raw = _tzlj_arena_strdup(arena, t.data);
             char buf[128];
             memset(buf, 0, 128);
             memcpy(buf, t.data.data, t.data.len);
+            buf[127] = '\0';
             v->number.number = atof(buf);
             break;
         }
