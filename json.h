@@ -37,6 +37,13 @@ typedef struct
 } tzlj_arena;
 
 typedef struct tzlj_value tzlj_value;
+
+typedef struct
+{
+    tzl_str key;
+    tzlj_value *val;
+} tzlj_object_kv;
+
 struct tzlj_value
 {
     tzlj_vk kind;
@@ -50,11 +57,7 @@ struct tzlj_value
         } array;
         struct
         {
-            struct tzlj_object_kv
-            {
-                tzl_str key;
-                tzlj_value *val;
-            } *data;
+            tzlj_object_kv *data;
             size_t len;
             size_t cap;
         } object;
@@ -336,7 +339,7 @@ tzlj_value *tzlj_parse(tzl_str src, tzlj_arena *arena)
         }
         else if (parent->kind == tzlj_vk_object)
         {
-            tzl_arr_push(&parent->object, ((struct tzlj_object_kv){.key = key, .val = v}));
+            tzl_arr_push(&parent->object, ((tzlj_object_kv){.key = key, .val = v}));
         }
         else
         {
@@ -350,59 +353,44 @@ tzlj_value *tzlj_parse(tzl_str src, tzlj_arena *arena)
 
 #ifdef TZL_JSON_TEST
 
-char *tzlj_tk_to_cstr(tzlj_tk t)
-{
-    switch (t)
-    {
-    case tzlj_tk_invalid:
-        return "tk_invalid";
-    case tzlj_tk_array_start:
-        return "tk_array_start";
-    case tzlj_tk_array_end:
-        return "tk_array_end";
-    case tzlj_tk_obj_start:
-        return "tk_obj_start";
-    case tzlj_tk_obj_end:
-        return "tk_obj_end";
-    case tzlj_tk_string:
-        return "tk_string";
-    case tzlj_tk_number:
-        return "tk_number";
-    case tzlj_tk_literal:
-        return "tk_literal";
-        // case tk_null:
-        //     return "tk_null";
-    }
-    return "";
-}
-
 char *tzl_json_test(void)
 {
-    tzlj_arena a = tzlj_arena_create(1024 * 1024);
+    tzlj_arena arena = tzlj_arena_create(1024);
+    char *src = "{\"name\": \"TZL Json Tests\", \"values\": [1, 2, 3], \"flag\": true, \"missing\": null}";
+    tzl_str json = tzl_str_from_cstr(src);
 
-    tzl_str json_str = tzl_str_from_cstr("{\"keyname\": \"a string value\", \"anarray\": [0, 1, 2, 3, 4]}");
-    // tzl_str json_str = tzl_str_from_cstr("\"Hello, World!\"");
-    tzlj_value *val = tzlj_parse(json_str, &a);
+    tzlj_value *root = tzlj_parse(json, &arena);
+    if (root->kind != tzlj_vk_object)
+        return "json parse: root is not object";
+    if (root->object.len != 4)
+        return "json parse: object length mismatch";
+    if (root->object.data[0].key.len != strlen("name") || strncmp(root->object.data[0].key.data, "name", root->object.data[0].key.len) != 0)
+        return "json parse: first key mismatch";
+    if (root->object.data[0].val->kind != tzlj_vk_string)
+        return "json parse: first value kind mismatch";
+    if (root->object.data[0].val->string.len != strlen("TZL Json Tests") || strncmp(root->object.data[0].val->string.data, "TZL Json Tests", root->object.data[0].val->string.len) != 0)
+        return "json parse: string value mismatch";
 
-    tzlj_arena_free(&a);
+    if (root->object.data[1].key.len != strlen("values") || strncmp(root->object.data[1].key.data, "values", root->object.data[1].key.len) != 0)
+        return "json parse: second key mismatch";
+    if (root->object.data[1].val->kind != tzlj_vk_array)
+        return "json parse: values kind mismatch";
+    if (root->object.data[1].val->array.len != 3)
+        return "json parse: array length mismatch";
+    if (root->object.data[1].val->array.data[0]->number.number != 1.0)
+        return "json parse: first array number mismatch";
 
-    a = tzlj_arena_create(1024);
+    if (root->object.data[2].key.len != strlen("flag") || strncmp(root->object.data[2].key.data, "flag", root->object.data[2].key.len) != 0)
+        return "json parse: third key mismatch";
+    if (root->object.data[2].val->kind != tzlj_vk_bool || root->object.data[2].val->boolean != true)
+        return "json parse: bool value mismatch";
 
-    char *other = "\"this is a json string\"";
-    tzl_str copy;
-    copy.data = strdup(other);
-    copy.len = strlen(other);
+    if (root->object.data[3].key.len != strlen("missing") || strncmp(root->object.data[3].key.data, "missing", root->object.data[3].key.len) != 0)
+        return "json parse: fourth key mismatch";
+    if (root->object.data[3].val->kind != tzlj_vk_null)
+        return "json parse: null value mismatch";
 
-    val = tzlj_parse(copy, &a);
-
-    free(copy.data);
-
-    tzlj_arena_free(&a);
-
-    // TODO WT: create a result object, store all values in an arena that is returned in the ret object
-    // then implement a free function that will free the arena
-    // We can also copy the input json into the arena so that referenced strings exist in the arena's lifetime
-
-    return 0;
+    tzlj_arena_free(&arena);
+    return NULL;
 }
 #endif
