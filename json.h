@@ -31,7 +31,7 @@ typedef enum
 
 typedef struct
 {
-    void *chunk;
+    uint8_t *chunk;
     size_t cap;
     size_t head;
 } tzlj_arena;
@@ -121,7 +121,7 @@ void *tzlj_arena_alloc(tzlj_arena *arena, size_t bytes)
 {
     assert(arena->head + bytes <= arena->cap);
 
-    void *result = (char *)arena->chunk + arena->head;
+    void *result = arena->chunk + arena->head;
     arena->head += bytes;
     return result;
 }
@@ -144,6 +144,8 @@ void tzlj_arena_free(tzlj_arena *arena)
     arena->head = 0;
 }
 
+#define _tzlj_str_chop(str) tzl_str_split((str), 1)
+
 tzlj_token _tzlj_token_next(tzl_str *json)
 {
     if (json->len == 0)
@@ -151,33 +153,30 @@ tzlj_token _tzlj_token_next(tzl_str *json)
 
     while ((isspace(*json->data) || ',' == *json->data || ':' == *json->data) && 0 < json->len)
     {
-        tzl_str_split(json, 1);
+        _tzlj_str_chop(json);
     }
 
-    if (*json->data == '[')
+    const struct
     {
-        return (tzlj_token){.kind = tzlj_tk_array_start, .data = tzl_str_split(json, 1)};
-    }
+        char c;
+        tzlj_tk k;
+    } toks[] = {
+        {.c = '[', .k = tzlj_tk_array_start},
+        {.c = ']', .k = tzlj_tk_array_end},
+        {.c = '{', .k = tzlj_tk_obj_start},
+        {.c = '}', .k = tzlj_tk_obj_end},
+    };
 
-    if (*json->data == ']')
+    for (size_t tok = 0; tok < (sizeof(toks) / sizeof(toks[0])); tok++)
     {
-        return (tzlj_token){.kind = tzlj_tk_array_end, .data = tzl_str_split(json, 1)};
-    }
-
-    if (*json->data == '{')
-    {
-        return (tzlj_token){.kind = tzlj_tk_obj_start, .data = tzl_str_split(json, 1)};
-    }
-
-    if (*json->data == '}')
-    {
-        return (tzlj_token){.kind = tzlj_tk_obj_end, .data = tzl_str_split(json, 1)};
+        if (*json->data == toks[tok].c)
+            return (tzlj_token){.kind = toks[tok].k, .data = _tzlj_str_chop(json)};
     }
 
     if (*json->data == '"')
     {
         // Snip off the starting '"'
-        tzl_str_split(json, 1);
+        _tzlj_str_chop(json);
 
         // Loop to the end of the string
         size_t len = 0;
@@ -199,7 +198,7 @@ tzlj_token _tzlj_token_next(tzl_str *json)
 
         tzlj_token t = {.kind = tzlj_tk_string, .data = tzl_str_split(json, len)};
         // Snip off the final '"'
-        tzl_str_split(json, 1);
+        _tzlj_str_chop(json);
 
         return t;
     }
@@ -245,7 +244,7 @@ tzlj_token _tzlj_token_next(tzl_str *json)
         return t;
     }
 
-    return (tzlj_token){.kind = tzlj_tk_invalid, .data = tzl_str_split(json, 1)};
+    return (tzlj_token){.kind = tzlj_tk_invalid, .data = _tzlj_str_chop(json)};
 }
 
 static tzl_str _tzlj_arena_strdup(tzlj_arena *arena, tzl_str str)
